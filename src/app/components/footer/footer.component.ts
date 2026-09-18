@@ -23,6 +23,13 @@ import { RouterLink } from '@angular/router';
             <a routerLink="/tournament">Tournament</a>
           </div>
           <div>
+            <div class="footer-heading">More</div>
+            <a routerLink="/sessions">Sessions</a>
+            <a routerLink="/previous-seasons">Previous Seasons</a>
+            <a routerLink="/gallery">Gallery</a>
+            <a routerLink="/venue-contact">Venue &amp; Contact</a>
+          </div>
+          <div>
             <div class="footer-heading">Tournament</div>
             <p>📅 Tournament Date Will Be Announced Soon</p>
             <p>🗓️ Expected: 1st Week of November 2026</p>
@@ -37,7 +44,7 @@ import { RouterLink } from '@angular/router';
   `,
   styles: [`
     .footer { background: var(--bg-card); border-top: 1px solid var(--border); padding: 3rem 0 1.5rem; margin-top: 4rem; }
-    .footer-grid { display: grid; grid-template-columns: repeat(3,1fr); gap: 2rem; margin-bottom: 2rem; }
+    .footer-grid { display: grid; grid-template-columns: repeat(4,1fr); gap: 2rem; margin-bottom: 2rem; }
     .footer-brand { font-family: 'Rajdhani',sans-serif; font-size: 1.8rem; font-weight: 700; color: var(--primary); }
     .footer-tagline { color: var(--text-muted); font-size: 0.8rem; letter-spacing: 1px; text-transform: uppercase; }
     .footer-desc { color: var(--text-muted); margin-top: 8px; font-size: 0.9rem; }
@@ -46,7 +53,8 @@ import { RouterLink } from '@angular/router';
     .footer a:hover { color: var(--primary); }
     .footer p { color: var(--text-muted); font-size: 0.85rem; margin-bottom: 6px; }
     .footer-bottom { border-top: 1px solid var(--border); padding-top: 1.5rem; text-align: center; color: var(--text-muted); font-size: 0.82rem; }
-    @media (max-width: 640px) { .footer-grid { grid-template-columns: 1fr; } }
+    @media (max-width: 768px) { .footer-grid { grid-template-columns: repeat(2,1fr); } }
+    @media (max-width: 480px) { .footer-grid { grid-template-columns: 1fr; } }
   `]
 })
 export class FooterComponent {}

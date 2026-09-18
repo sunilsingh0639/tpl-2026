@@ -47,9 +47,11 @@ export class AdminComponent implements OnInit {
     { path: '/admin/announcements', icon: '📢', label: 'Announcements' },
     { path: '/admin/seasons', icon: '🏅', label: 'Seasons' },
     { path: '/admin/gallery', icon: '🖼️', label: 'Gallery' },
+    { path: '/admin/sessions', icon: '📅', label: 'Sessions' },
     { path: '/admin/tournament-settings', icon: '🏟️', label: 'Venue & Contact' },
     { path: '/admin/settings', icon: '⚙️', label: 'Settings' },
-    { path: '/admin/audit', icon: '📋', label: 'Audit Log' }
+    { path: '/admin/audit', icon: '📋', label: 'Audit Log' },
+    { path: '/admin/backup', icon: '📦', label: 'Backup & Data' }
   ];
 
   constructor(private auth: AuthService, private router: Router) {}

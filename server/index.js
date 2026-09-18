@@ -8,9 +8,11 @@ const jwt = require('jsonwebtoken');
 const multer = require('multer');
 const path = require('path');
 const fs = require('fs');
+const archiver = require('archiver');
 const { v4: uuidv4 } = require('uuid');
 const excel = require('./excel.service');
 const auction = require('./auction.engine');
+const driveService = require('./drive.service');
 
 const app = express();
 const server = http.createServer(app);
@@ -20,6 +22,7 @@ const JWT_SECRET = process.env.JWT_SECRET || 'tpl2026-secret-key';
 const ADMIN_USER = process.env.ADMIN_USER || 'admin';
 const ADMIN_PASS_HASH = bcrypt.hashSync(process.env.ADMIN_PASS || 'tpl2026admin', 10);
 const PORT = process.env.PORT || 3000;
+const FRONTEND_URL = process.env.FRONTEND_URL || 'http://localhost:4200';
 
 const UPLOADS_DIR = path.join(__dirname, 'uploads');
 const GALLERY_DIR = path.join(UPLOADS_DIR, 'gallery');
@@ -65,9 +68,26 @@ const seasonImgStorage = multer.diskStorage({
 });
 const seasonUpload = multer({ storage: seasonImgStorage, limits: { fileSize: 5 * 1024 * 1024 } });
 
-app.use(cors({ origin: 'http://localhost:4200', credentials: true }));
+app.use(cors({ origin: [FRONTEND_URL, 'http://localhost:4200'], credentials: true }));
 app.use(express.json());
 app.use('/uploads', express.static(UPLOADS_DIR));
+
+// ---- Shared image upload helper ----
+// Always saves to local /uploads first (multer), then if Drive enabled,
+// uploads to Drive and returns the Drive URL. Local file kept as fallback.
+async function uploadImageIfDrive(file) {
+  if (!file) return '';
+  const localPath = `/uploads/${path.relative(UPLOADS_DIR, file.path).replace(/\\/g, '/')}`;
+  if (!driveService.DRIVE_ENABLED) return localPath;
+  try {
+    const buf = fs.readFileSync(file.path);
+    const driveFile = await driveService.uploadImageToDrive(buf, file.filename, file.mimetype);
+    if (driveFile && driveFile.id) return driveService.getDriveImageUrl(driveFile.id);
+  } catch (e) {
+    console.error('Drive image upload failed, using local path:', e.message);
+  }
+  return localPath;
+}
 
 // ---- Auth middleware ----
 function authAdmin(req, res, next) {
@@ -145,7 +165,7 @@ app.post('/api/players/register', upload.single('photo'), async (req, res) => {
 
     const count = players.length + 1;
     const player_id = `TPL26-P${String(count).padStart(3, '0')}`;
-    const photo = req.file ? `/uploads/${req.file.filename}` : '';
+    const photo = await uploadImageIfDrive(req.file);
     const age = dob ? Math.floor((new Date() - new Date(dob)) / (365.25 * 24 * 3600 * 1000)) : '';
 
     const player = {
@@ -166,7 +186,7 @@ app.post('/api/players/register', upload.single('photo'), async (req, res) => {
 app.put('/api/admin/players/:id', authAdmin, upload.single('photo'), async (req, res) => {
   try {
     const updates = { ...req.body };
-    if (req.file) updates.photo = `/uploads/${req.file.filename}`;
+    if (req.file) updates.photo = await uploadImageIfDrive(req.file);
     const prev = await excel.getPlayerById(req.params.id);
     const updated = await excel.updatePlayer(req.params.id, updates);
     await excel.saveAudit({ audit_id: uuidv4(), action: 'PLAYER_UPDATED', entity: 'Player', entity_id: req.params.id, prev_value: JSON.stringify(prev), new_value: JSON.stringify(updates), created_at: new Date().toISOString(), admin: req.user.username });
@@ -214,7 +234,7 @@ app.post('/api/admin/teams', authAdmin, upload.single('logo'), async (req, res) 
 
     const count = teams.length + 1;
     const team_id = `TPL26-T${String(count).padStart(2, '0')}`;
-    const logo = req.file ? `/uploads/${req.file.filename}` : '';
+    const logo = await uploadImageIfDrive(req.file);
     const initialPurse = parseInt(settings.initialPurse) || 21000;
 
     const team = {
@@ -233,7 +253,7 @@ app.post('/api/admin/teams', authAdmin, upload.single('logo'), async (req, res) 
 app.put('/api/admin/teams/:id', authAdmin, upload.single('logo'), async (req, res) => {
   try {
     const updates = { ...req.body };
-    if (req.file) updates.logo = `/uploads/${req.file.filename}`;
+    if (req.file) updates.logo = await uploadImageIfDrive(req.file);
     const updated = await excel.updateTeam(req.params.id, updates);
     await excel.saveAudit({ audit_id: uuidv4(), action: 'TEAM_UPDATED', entity: 'Team', entity_id: req.params.id, prev_value: '', new_value: JSON.stringify(updates), created_at: new Date().toISOString(), admin: req.user.username });
     res.json(updated);
@@ -447,8 +467,8 @@ app.post('/api/admin/seasons', authAdmin, seasonUpload.fields([{name:'champion_l
     const { season_number, season_name, year, champion_team, captain, man_of_series, runner_up, final_description, final_score, venue, status, display_order } = req.body;
     if (!season_name || !champion_team) return res.status(400).json({ error: 'Season name and champion team required' });
     const season_id = `S${String(seasons.length + 1).padStart(2,'0')}`;
-    const champion_logo = req.files?.champion_logo?.[0] ? `/uploads/seasons/${req.files.champion_logo[0].filename}` : '';
-    const champion_image = req.files?.champion_image?.[0] ? `/uploads/seasons/${req.files.champion_image[0].filename}` : '';
+    const champion_logo = await uploadImageIfDrive(req.files?.champion_logo?.[0]);
+    const champion_image = await uploadImageIfDrive(req.files?.champion_image?.[0]);
     const season = { season_id, season_number: season_number||String(seasons.length+1), season_name, year: year||'', champion_team, champion_logo, champion_image, captain: captain||'', man_of_series: man_of_series||'', runner_up: runner_up||'', final_description: final_description||'', final_score: final_score||'', venue: venue||'', status: status||'ACTIVE', display_order: display_order||String(seasons.length+1), created_at: new Date().toISOString(), updated_at: new Date().toISOString() };
     await excel.saveSeason(season);
     await excel.saveAudit({ audit_id: uuidv4(), action: 'SEASON_ADDED', entity: 'Season', entity_id: season_id, prev_value: '', new_value: season_name, created_at: new Date().toISOString(), admin: req.user.username });
@@ -461,8 +481,8 @@ app.put('/api/admin/seasons/:id', authAdmin, seasonUpload.fields([{name:'champio
     const existing = await excel.getSeasonById(req.params.id);
     if (!existing) return res.status(404).json({ error: 'Season not found' });
     const updates = { ...existing, ...req.body, updated_at: new Date().toISOString() };
-    if (req.files?.champion_logo?.[0]) updates.champion_logo = `/uploads/seasons/${req.files.champion_logo[0].filename}`;
-    if (req.files?.champion_image?.[0]) updates.champion_image = `/uploads/seasons/${req.files.champion_image[0].filename}`;
+    if (req.files?.champion_logo?.[0]) updates.champion_logo = await uploadImageIfDrive(req.files.champion_logo[0]);
+    if (req.files?.champion_image?.[0]) updates.champion_image = await uploadImageIfDrive(req.files.champion_image[0]);
     const updated = await excel.saveSeason(updates);
     res.json(updated);
   } catch (e) { res.status(500).json({ error: e.message }); }
@@ -501,8 +521,7 @@ app.post('/api/admin/gallery', authAdmin, galleryUpload.array('images', 20), asy
     for (let i = 0; i < req.files.length; i++) {
       const file = req.files[i];
       const seasonId = req.body.season_id || 'GENERAL';
-      const subDir = seasonId.toLowerCase().replace(/[^a-z0-9]/g,'') === 'general' ? 'general' : seasonId.toLowerCase().replace(/[^a-z0-9]/g,'');
-      const relPath = `/uploads/gallery/${subDir}/${file.filename}`;
+      const imagePath = await uploadImageIfDrive(file);
       const gallery_id = `G${String(allItems.length + results.length + 1).padStart(3,'0')}_${Date.now()}`;
       const titles = Array.isArray(req.body.titles) ? req.body.titles : [req.body.titles || file.originalname];
       const descs = Array.isArray(req.body.descriptions) ? req.body.descriptions : [req.body.descriptions || ''];
@@ -511,7 +530,7 @@ app.post('/api/admin/gallery', authAdmin, galleryUpload.array('images', 20), asy
         title: titles[i] || file.originalname,
         description: descs[i] || '',
         category: req.body.category || 'GENERAL',
-        image_path: relPath,
+        image_path: imagePath,
         featured: req.body.featured || 'false',
         display_order: String(allItems.length + results.length + 1),
         active: 'true',
@@ -559,6 +578,138 @@ app.put('/api/admin/tournament-settings', authAdmin, async (req, res) => {
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
+// ---- Sessions ----
+app.get('/api/sessions', async (req, res) => {
+  try {
+    const settings = await excel.getTournamentSettings();
+    // Sessions are stored as TournamentSettings keys prefixed with 'session_'
+    // Also check for a dedicated Sessions sheet via getSettings
+    const allSettings = await excel.getSettings();
+    // Return structured session info from settings
+    const sessions = [];
+    // Parse session entries from settings (session_1_name, session_1_date, etc.)
+    const sessionKeys = Object.keys(allSettings).filter(k => k.match(/^session_\d+_name$/));
+    sessionKeys.forEach(k => {
+      const num = k.match(/^session_(\d+)_name$/)[1];
+      sessions.push({
+        id: `session_${num}`,
+        name: allSettings[`session_${num}_name`] || '',
+        date: allSettings[`session_${num}_date`] || '',
+        time: allSettings[`session_${num}_time`] || '',
+        description: allSettings[`session_${num}_description`] || '',
+        status: allSettings[`session_${num}_status`] || 'UPCOMING',
+        notes: allSettings[`session_${num}_notes`] || '',
+        order: Number(num)
+      });
+    });
+    sessions.sort((a, b) => a.order - b.order);
+    res.json(sessions);
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+app.post('/api/admin/sessions', authAdmin, async (req, res) => {
+  try {
+    const allSettings = await excel.getSettings();
+    const existing = Object.keys(allSettings).filter(k => k.match(/^session_\d+_name$/));
+    const num = existing.length + 1;
+    const { name, date, time, description, status, notes } = req.body;
+    if (!name) return res.status(400).json({ error: 'Session name required' });
+    await excel.updateSettings({
+      [`session_${num}_name`]: name || '',
+      [`session_${num}_date`]: date || '',
+      [`session_${num}_time`]: time || '',
+      [`session_${num}_description`]: description || '',
+      [`session_${num}_status`]: status || 'UPCOMING',
+      [`session_${num}_notes`]: notes || ''
+    });
+    res.status(201).json({ id: `session_${num}`, name, date, time, description, status, notes, order: num });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+app.put('/api/admin/sessions/:id', authAdmin, async (req, res) => {
+  try {
+    const num = req.params.id.replace('session_', '');
+    const { name, date, time, description, status, notes } = req.body;
+    await excel.updateSettings({
+      [`session_${num}_name`]: name || '',
+      [`session_${num}_date`]: date || '',
+      [`session_${num}_time`]: time || '',
+      [`session_${num}_description`]: description || '',
+      [`session_${num}_status`]: status || 'UPCOMING',
+      [`session_${num}_notes`]: notes || ''
+    });
+    res.json({ id: req.params.id, name, date, time, description, status, notes });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+app.delete('/api/admin/sessions/:id', authAdmin, async (req, res) => {
+  try {
+    const num = req.params.id.replace('session_', '');
+    await excel.updateSettings({
+      [`session_${num}_name`]: '__DELETED__',
+      [`session_${num}_status`]: 'DELETED'
+    });
+    res.json({ message: 'Session deleted' });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// ---- Drive status ----
+app.get('/api/admin/drive-status', authAdmin, (req, res) => {
+  res.json({
+    driveEnabled: driveService.DRIVE_ENABLED,
+    driveFileId: process.env.DRIVE_FILE_ID || null,
+    driveFolderId: process.env.DRIVE_FOLDER_ID || null
+  });
+});
+
+// ---- Backup & Data ----
+app.get('/api/admin/backup/excel', authAdmin, async (req, res) => {
+  try {
+    const DATA_FILE = require('path').join(__dirname, 'data', 'tpl2026.xlsx');
+    if (!require('fs').existsSync(DATA_FILE)) return res.status(404).json({ error: 'Excel file not found' });
+    res.download(DATA_FILE, 'tpl2026.xlsx');
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+app.get('/api/admin/backup/images', authAdmin, async (req, res) => {
+  try {
+    if (driveService.DRIVE_ENABLED) {
+      const files = await driveService.listDriveImages();
+      res.json(files.map(f => ({ id: f.id, name: f.name, mimeType: f.mimeType, size: f.size, createdTime: f.createdTime, url: driveService.getDriveImageUrl(f.id) })));
+    } else {
+      // List local uploads
+      const uploadsDir = path.join(__dirname, 'uploads');
+      const files = [];
+      function walk(dir, base) {
+        if (!fs.existsSync(dir)) return;
+        fs.readdirSync(dir).forEach(f => {
+          const full = path.join(dir, f);
+          const rel = path.join(base, f);
+          if (fs.statSync(full).isDirectory()) walk(full, rel);
+          else files.push({ name: rel, url: '/uploads/' + rel.replace(/\\/g, '/'), size: fs.statSync(full).size });
+        });
+      }
+      walk(uploadsDir, '');
+      res.json(files);
+    }
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+app.get('/api/admin/backup/download', authAdmin, async (req, res) => {
+  try {
+    const DATA_FILE = path.join(__dirname, 'data', 'tpl2026.xlsx');
+    res.setHeader('Content-Type', 'application/zip');
+    res.setHeader('Content-Disposition', `attachment; filename="TPL2026-Backup-${new Date().toISOString().slice(0,10)}.zip"`);
+    const archive = archiver('zip', { zlib: { level: 6 } });
+    archive.on('error', e => { console.error('Archive error:', e); });
+    archive.pipe(res);
+    if (fs.existsSync(DATA_FILE)) archive.file(DATA_FILE, { name: 'tpl2026.xlsx' });
+    const uploadsDir = path.join(__dirname, 'uploads');
+    if (fs.existsSync(uploadsDir)) archive.directory(uploadsDir, 'uploads');
+    await archive.finalize();
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
 // ---- WebSocket ----
 io.on('connection', (socket) => {
   socket.emit('AUCTION_STATE', auction.getState());
@@ -568,6 +719,18 @@ io.on('connection', (socket) => {
 auction.setIO(io);
 
 // ---- Start ----
-auction.restoreStateFromExcel().then(() => {
-  server.listen(PORT, () => console.log(`TPL2026 server running on port ${PORT}`));
-});
+async function startServer() {
+  // 1. Pull latest Excel from Drive (blocks until done or falls back to local)
+  await excel.syncFromDrive();
+  // 2. Ensure local Excel exists and all sheets are migrated
+  const { loadWorkbookForInit } = require('./excel.service');
+  if (loadWorkbookForInit) loadWorkbookForInit();
+  // 3. Restore auction state from Excel
+  await auction.restoreStateFromExcel();
+  // 4. Start listening
+  server.listen(PORT, () => {
+    console.log(`TPL2026 server running on port ${PORT}${driveService.DRIVE_ENABLED ? ' [Google Drive ENABLED]' : ' [Local Excel mode]'}`);
+  });
+}
+
+startServer().catch(e => { console.error('Server startup failed:', e); process.exit(1); });

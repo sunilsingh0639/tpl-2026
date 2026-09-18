@@ -12,35 +12,29 @@ import { Season } from '../../../types/models';
   imports: [CommonModule, FormsModule, ConfirmModalComponent],
   template: `
     <div style="padding:2rem">
-      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1.5rem">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1.5rem;flex-wrap:wrap;gap:1rem">
         <div><h1>Previous Seasons</h1><p style="color:var(--text-muted)">{{ seasons.length }} seasons</p></div>
         <button class="btn btn-primary" (click)="openAdd()">+ Add Season</button>
       </div>
 
       <div class="grid grid-3">
-        <div class="card" *ngFor="let s of seasons">
-          <div style="display:flex;gap:1rem;align-items:center;margin-bottom:1rem">
-            <div *ngIf="s.champion_logo; else noLogo">
-              <img [src]="'http://localhost:3000' + s.champion_logo" style="width:56px;height:56px;border-radius:50%;object-fit:cover;border:2px solid var(--primary)">
-            </div>
-            <ng-template #noLogo>
-              <div style="width:56px;height:56px;border-radius:50%;background:linear-gradient(135deg,var(--primary),var(--secondary));display:flex;align-items:center;justify-content:center;font-size:1.4rem;font-weight:700;color:white">
-                {{ s.season_number }}
-              </div>
-            </ng-template>
+        <div class="card" *ngFor="let s of seasons" style="position:relative">
+          <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:1rem">
             <div>
-              <div style="font-weight:700;font-size:1.1rem">{{ s.season_name }}</div>
+              <div style="font-size:0.75rem;color:var(--primary);font-weight:700;text-transform:uppercase">Season {{ s.season_number }}</div>
+              <h3 style="font-size:1.1rem">{{ s.season_name }}</h3>
               <div style="color:var(--text-muted);font-size:0.8rem">{{ s.year }}</div>
-              <span class="badge" [class]="s.status === 'ACTIVE' ? 'badge-active' : 'badge-inactive'">{{ s.status }}</span>
             </div>
+            <span class="badge badge-{{ s.status?.toLowerCase() }}">{{ s.status }}</span>
           </div>
-          <div style="font-size:0.85rem;color:var(--text-muted);margin-bottom:4px">🏆 <strong style="color:var(--accent)">{{ s.champion_team }}</strong></div>
-          <div style="font-size:0.85rem;color:var(--text-muted);margin-bottom:4px">👑 Captain: {{ s.captain || '—' }}</div>
-          <div style="font-size:0.85rem;color:var(--text-muted);margin-bottom:4px">🥈 Runner-up: {{ s.runner_up || '—' }}</div>
-          <div style="font-size:0.85rem;color:var(--text-muted);margin-bottom:1rem">⭐ MoS: {{ s.man_of_series || '—' }}</div>
-          <div style="display:flex;gap:8px">
+          <div style="font-size:0.88rem;margin-bottom:0.5rem"><strong style="color:var(--accent)">🏆 {{ s.champion_team }}</strong></div>
+          <div style="font-size:0.82rem;color:var(--text-muted)" *ngIf="s.captain">👑 {{ s.captain }}</div>
+          <div style="font-size:0.82rem;color:var(--text-muted)" *ngIf="s.man_of_series">⭐ {{ s.man_of_series }}</div>
+          <div style="font-size:0.82rem;color:var(--text-muted);margin-top:8px;font-style:italic" *ngIf="s.final_description">"{{ s.final_description }}"</div>
+          <div style="display:flex;gap:8px;margin-top:1rem">
             <button class="btn btn-secondary btn-sm" style="flex:1" (click)="openEdit(s)">Edit</button>
-            <button class="btn btn-danger btn-sm" style="flex:1" (click)="confirmDel(s)">Delete</button>
+            <button class="btn btn-warning btn-sm" (click)="toggleStatus(s)">{{ s.status === 'INACTIVE' ? 'Activate' : 'Deactivate' }}</button>
+            <button class="btn btn-danger btn-sm" (click)="confirmDel(s)">Delete</button>
           </div>
         </div>
         <div *ngIf="seasons.length === 0" class="empty-state" style="grid-column:1/-1">
@@ -49,17 +43,18 @@ import { Season } from '../../../types/models';
       </div>
     </div>
 
+    <!-- Form Modal -->
     <div class="modal-overlay" *ngIf="showForm" (click)="showForm=false">
       <div class="modal" style="max-width:700px;width:100%;max-height:90vh;overflow-y:auto" (click)="$event.stopPropagation()">
         <h2 class="modal-title">{{ editingId ? 'Edit Season' : 'Add Season' }}</h2>
         <div class="grid grid-2">
           <div class="form-group">
-            <label class="form-label">Season Name *</label>
-            <input class="form-control" [(ngModel)]="form.season_name" placeholder="e.g. TPL Season 4">
-          </div>
-          <div class="form-group">
             <label class="form-label">Season Number</label>
             <input class="form-control" type="number" [(ngModel)]="form.season_number">
+          </div>
+          <div class="form-group">
+            <label class="form-label">Season Name *</label>
+            <input class="form-control" [(ngModel)]="form.season_name" placeholder="e.g. TPL Season 4">
           </div>
           <div class="form-group">
             <label class="form-label">Year</label>
@@ -67,7 +62,7 @@ import { Season } from '../../../types/models';
           </div>
           <div class="form-group">
             <label class="form-label">Champion Team *</label>
-            <input class="form-control" [(ngModel)]="form.champion_team">
+            <input class="form-control" [(ngModel)]="form.champion_team" placeholder="Winning team name">
           </div>
           <div class="form-group">
             <label class="form-label">Captain</label>
@@ -83,21 +78,21 @@ import { Season } from '../../../types/models';
           </div>
           <div class="form-group">
             <label class="form-label">Final Score</label>
-            <input class="form-control" [(ngModel)]="form.final_score" placeholder="e.g. 120/5 vs 115/8">
+            <input class="form-control" [(ngModel)]="form.final_score">
           </div>
           <div class="form-group">
             <label class="form-label">Venue</label>
             <input class="form-control" [(ngModel)]="form.venue">
           </div>
           <div class="form-group">
+            <label class="form-label">Display Order</label>
+            <input class="form-control" type="number" [(ngModel)]="form.display_order">
+          </div>
+          <div class="form-group">
             <label class="form-label">Status</label>
             <select class="form-control" [(ngModel)]="form.status">
               <option>ACTIVE</option><option>INACTIVE</option>
             </select>
-          </div>
-          <div class="form-group">
-            <label class="form-label">Display Order</label>
-            <input class="form-control" type="number" [(ngModel)]="form.display_order">
           </div>
           <div class="form-group" style="grid-column:1/-1">
             <label class="form-label">Final Description</label>
@@ -134,31 +129,30 @@ export class AdminSeasonsComponent implements OnInit {
 
   constructor(private api: ApiService, private toast: ToastService) {}
   ngOnInit() { this.load(); }
-  load() { this.api.getAdminSeasons().subscribe(s => this.seasons = s.sort((a, b) => Number(a.display_order) - Number(b.display_order))); }
-
-  onFile(e: any, type: 'logo' | 'image') {
-    const file = e.target.files[0];
-    if (type === 'logo') this.logoFile = file; else this.imageFile = file;
-  }
+  load() { this.api.getAdminSeasons().subscribe(s => this.seasons = s.sort((a,b) => Number(a.display_order)-Number(b.display_order))); }
 
   openAdd() {
     this.editingId = ''; this.formError = '';
-    this.form = { season_name: '', season_number: String(this.seasons.length + 1), year: '', champion_team: '', captain: '', man_of_series: '', runner_up: '', final_description: '', final_score: '', venue: '', status: 'ACTIVE', display_order: String(this.seasons.length + 1) };
+    this.form = { season_number: this.seasons.length + 1, season_name: '', year: '', champion_team: '', captain: '', man_of_series: '', runner_up: '', final_description: '', final_score: '', venue: '', status: 'ACTIVE', display_order: this.seasons.length + 1 };
     this.logoFile = null; this.imageFile = null; this.showForm = true;
   }
 
   openEdit(s: Season) {
     this.editingId = s.season_id; this.formError = '';
-    this.form = { ...s };
-    this.logoFile = null; this.imageFile = null; this.showForm = true;
+    this.form = { ...s }; this.logoFile = null; this.imageFile = null; this.showForm = true;
+  }
+
+  onFile(e: any, type: string) {
+    const file = e.target.files[0];
+    if (type === 'logo') this.logoFile = file;
+    else this.imageFile = file;
   }
 
   save() {
     if (!this.form.season_name || !this.form.champion_team) { this.formError = 'Season name and champion team required'; return; }
     this.saving = true; this.formError = '';
     const fd = new FormData();
-    const skip = ['champion_logo', 'champion_image', 'created_at', 'updated_at', 'season_id'];
-    Object.entries(this.form).forEach(([k, v]) => { if (!skip.includes(k)) fd.append(k, String(v ?? '')); });
+    Object.entries(this.form).forEach(([k, v]) => fd.append(k, String(v ?? '')));
     if (this.logoFile) fd.append('champion_logo', this.logoFile);
     if (this.imageFile) fd.append('champion_image', this.imageFile);
     const obs = this.editingId ? this.api.updateSeason(this.editingId, fd) : this.api.createSeason(fd);
@@ -168,12 +162,14 @@ export class AdminSeasonsComponent implements OnInit {
     });
   }
 
+  toggleStatus(s: Season) {
+    const fd = new FormData(); fd.append('status', s.status === 'INACTIVE' ? 'ACTIVE' : 'INACTIVE');
+    this.api.updateSeason(s.season_id, fd).subscribe({ next: () => { this.toast.success('Updated'); this.load(); }, error: (err) => this.toast.error(err.error?.error || 'Failed') });
+  }
+
   confirmDel(s: Season) { this.delTarget = s; this.showDel = true; }
   doDelete() {
     if (!this.delTarget) return;
-    this.api.deleteSeason(this.delTarget.season_id).subscribe({
-      next: () => { this.toast.success('Season deleted'); this.showDel = false; this.load(); },
-      error: (err) => this.toast.error(err.error?.error || 'Delete failed')
-    });
+    this.api.deleteSeason(this.delTarget.season_id).subscribe({ next: () => { this.toast.success('Deleted'); this.showDel = false; this.load(); }, error: (err) => this.toast.error(err.error?.error || 'Failed') });
   }
 }

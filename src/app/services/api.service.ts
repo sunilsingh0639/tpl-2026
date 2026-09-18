@@ -90,4 +90,21 @@ export class ApiService {
   // Tournament Settings
   getTournamentSettings(): Observable<TournamentSettings> { return this.http.get<TournamentSettings>(`${API}/tournament-settings`); }
   updateTournamentSettings(data: any): Observable<any> { return this.http.put(`${API}/admin/tournament-settings`, data, { headers: this.headers() }); }
+
+  // Sessions
+  getSessions(): Observable<any[]> { return this.http.get<any[]>(`${API}/sessions`); }
+  createSession(data: any): Observable<any> { return this.http.post(`${API}/admin/sessions`, data, { headers: this.headers() }); }
+  updateSession(id: string, data: any): Observable<any> { return this.http.put(`${API}/admin/sessions/${id}`, data, { headers: this.headers() }); }
+  deleteSession(id: string): Observable<any> { return this.http.delete(`${API}/admin/sessions/${id}`, { headers: this.headers() }); }
+
+  // Backup
+  getBackupImages(): Observable<any[]> { return this.http.get<any[]>(`${API}/admin/backup/images`, { headers: this.headers() }); }
+  getDriveStatus(): Observable<any> { return this.http.get<any>(`${API}/admin/drive-status`, { headers: this.headers() }); }
+  getExcelDownloadUrl(): string { return `${API}/admin/backup/excel`; }
+  getBackupDownloadUrl(): string { return `${API}/admin/backup/download`; }
+  getImageUrl(path: string): string {
+    if (!path) return '';
+    if (path.startsWith('http')) return path;
+    return `http://localhost:3000${path}`;
+  }
 }

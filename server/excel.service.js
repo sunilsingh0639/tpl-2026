@@ -1,6 +1,7 @@
 const XLSX = require('xlsx');
 const path = require('path');
 const fs = require('fs');
+const drive = require('./drive.service');
 
 const DATA_FILE = path.join(__dirname, 'data', 'tpl2026.xlsx');
 
@@ -193,9 +194,28 @@ function createWorkbook() {
   return wb;
 }
 
-function saveWorkbook(wb) {
+async function saveWorkbook(wb) {
   ensureDataDir();
   XLSX.writeFile(wb, DATA_FILE);
+  if (drive.DRIVE_ENABLED) {
+    await drive.uploadExcelToDrive(DATA_FILE).catch(e => console.error('Drive sync error:', e.message));
+  }
+}
+
+// Pull latest from Drive on startup if enabled
+async function syncFromDrive() {
+  if (!drive.DRIVE_ENABLED) return;
+  try {
+    const tmpPath = await drive.downloadExcelToTemp();
+    if (tmpPath) {
+      ensureDataDir();
+      fs.copyFileSync(tmpPath, DATA_FILE);
+      fs.unlinkSync(tmpPath);
+      console.log('Synced Excel from Google Drive');
+    }
+  } catch (e) {
+    console.error('Drive sync on startup failed (using local):', e.message);
+  }
 }
 
 function sheetToJson(wb, sheetName) {
@@ -232,7 +252,7 @@ async function savePlayer(player) {
     const players = sheetToJson(wb, SHEETS.PLAYERS);
     players.push(player);
     wb.Sheets[SHEETS.PLAYERS] = jsonToSheet(players, PLAYER_HEADERS);
-    saveWorkbook(wb);
+    await saveWorkbook(wb);
     return player;
   } finally { releaseLock(); }
 }
@@ -246,7 +266,7 @@ async function updatePlayer(id, updates) {
     if (idx === -1) throw new Error('Player not found');
     players[idx] = { ...players[idx], ...updates };
     wb.Sheets[SHEETS.PLAYERS] = jsonToSheet(players, PLAYER_HEADERS);
-    saveWorkbook(wb);
+    await saveWorkbook(wb);
     return players[idx];
   } finally { releaseLock(); }
 }
@@ -258,7 +278,7 @@ async function deletePlayer(id) {
     let players = sheetToJson(wb, SHEETS.PLAYERS);
     players = players.filter(p => p.player_id !== id);
     wb.Sheets[SHEETS.PLAYERS] = jsonToSheet(players, PLAYER_HEADERS);
-    saveWorkbook(wb);
+    await saveWorkbook(wb);
   } finally { releaseLock(); }
 }
 
@@ -285,7 +305,7 @@ async function saveTeam(team) {
     const teams = sheetToJson(wb, SHEETS.TEAMS);
     teams.push(team);
     wb.Sheets[SHEETS.TEAMS] = jsonToSheet(teams, TEAM_HEADERS);
-    saveWorkbook(wb);
+    await saveWorkbook(wb);
     return team;
   } finally { releaseLock(); }
 }
@@ -299,7 +319,7 @@ async function updateTeam(id, updates) {
     if (idx === -1) throw new Error('Team not found');
     teams[idx] = { ...teams[idx], ...updates };
     wb.Sheets[SHEETS.TEAMS] = jsonToSheet(teams, TEAM_HEADERS);
-    saveWorkbook(wb);
+    await saveWorkbook(wb);
     return teams[idx];
   } finally { releaseLock(); }
 }
@@ -324,7 +344,7 @@ async function saveAuction(auction) {
     if (idx >= 0) auctions[idx] = auction;
     else auctions.push(auction);
     wb.Sheets[SHEETS.AUCTION] = jsonToSheet(auctions, AUCTION_HEADERS);
-    saveWorkbook(wb);
+    await saveWorkbook(wb);
     return auction;
   } finally { releaseLock(); }
 }
@@ -348,7 +368,7 @@ async function saveBid(bid) {
     const bids = sheetToJson(wb, SHEETS.BIDS);
     bids.push(bid);
     wb.Sheets[SHEETS.BIDS] = jsonToSheet(bids, BID_HEADERS);
-    saveWorkbook(wb);
+    await saveWorkbook(wb);
     return bid;
   } finally { releaseLock(); }
 }
@@ -376,7 +396,7 @@ async function updateSettings(updates) {
       else rows.push({ key, value: String(value) });
     });
     wb.Sheets[SHEETS.SETTINGS] = jsonToSheet(rows, ['key', 'value']);
-    saveWorkbook(wb);
+    await saveWorkbook(wb);
     return rows;
   } finally { releaseLock(); }
 }
@@ -401,7 +421,7 @@ async function saveAnnouncement(ann) {
     if (idx >= 0) anns[idx] = ann;
     else anns.push(ann);
     wb.Sheets[SHEETS.ANNOUNCEMENTS] = jsonToSheet(anns, ANN_HEADERS);
-    saveWorkbook(wb);
+    await saveWorkbook(wb);
     return ann;
   } finally { releaseLock(); }
 }
@@ -413,7 +433,7 @@ async function deleteAnnouncement(id) {
     let anns = sheetToJson(wb, SHEETS.ANNOUNCEMENTS);
     anns = anns.filter(a => a.announcement_id !== id);
     wb.Sheets[SHEETS.ANNOUNCEMENTS] = jsonToSheet(anns, ANN_HEADERS);
-    saveWorkbook(wb);
+    await saveWorkbook(wb);
   } finally { releaseLock(); }
 }
 
@@ -427,7 +447,7 @@ async function saveAudit(entry) {
     const logs = sheetToJson(wb, SHEETS.AUDIT);
     logs.push(entry);
     wb.Sheets[SHEETS.AUDIT] = jsonToSheet(logs, AUDIT_HEADERS);
-    saveWorkbook(wb);
+    await saveWorkbook(wb);
   } finally { releaseLock(); }
 }
 
@@ -476,7 +496,7 @@ async function atomicSellPlayer({ playerId, teamId, finalBid, auctionId }) {
     wb.Sheets[SHEETS.PLAYERS] = jsonToSheet(players, PLAYER_HEADERS);
     wb.Sheets[SHEETS.TEAMS] = jsonToSheet(teams, TEAM_HEADERS);
     wb.Sheets[SHEETS.AUCTION] = jsonToSheet(auctions, AUCTION_HEADERS);
-    saveWorkbook(wb);
+    await saveWorkbook(wb);
 
     return { player: players[pIdx], team: teams[tIdx] };
   } finally { releaseLock(); }
@@ -508,7 +528,7 @@ async function saveSeason(season) {
     const idx = seasons.findIndex(s => s.season_id === season.season_id);
     if (idx >= 0) seasons[idx] = season; else seasons.push(season);
     wb.Sheets[SHEETS.SEASONS] = jsonToSheet(seasons, SEASON_HEADERS);
-    saveWorkbook(wb); return season;
+    await saveWorkbook(wb); return season;
   } finally { releaseLock(); }
 }
 
@@ -519,7 +539,7 @@ async function deleteSeason(id) {
     let seasons = sheetToJson(wb, SHEETS.SEASONS);
     seasons = seasons.filter(s => s.season_id !== id);
     wb.Sheets[SHEETS.SEASONS] = jsonToSheet(seasons, SEASON_HEADERS);
-    saveWorkbook(wb);
+    await saveWorkbook(wb);
   } finally { releaseLock(); }
 }
 
@@ -545,7 +565,7 @@ async function saveGalleryItem(item) {
     const idx = items.findIndex(g => g.gallery_id === item.gallery_id);
     if (idx >= 0) items[idx] = item; else items.push(item);
     wb.Sheets[SHEETS.GALLERY] = jsonToSheet(items, GALLERY_HEADERS);
-    saveWorkbook(wb); return item;
+    await saveWorkbook(wb); return item;
   } finally { releaseLock(); }
 }
 
@@ -557,7 +577,7 @@ async function deleteGalleryItem(id) {
     const item = items.find(g => g.gallery_id === id);
     items = items.filter(g => g.gallery_id !== id);
     wb.Sheets[SHEETS.GALLERY] = jsonToSheet(items, GALLERY_HEADERS);
-    saveWorkbook(wb);
+    await saveWorkbook(wb);
     return item;
   } finally { releaseLock(); }
 }
@@ -588,12 +608,18 @@ async function updateTournamentSettings(updates) {
       else rows.push({ setting_key: key, setting_value: String(value), updated_at: now });
     });
     wb.Sheets[SHEETS.TSETTINGS] = jsonToSheet(rows, TS_HEADERS);
-    saveWorkbook(wb); return rows;
+    await saveWorkbook(wb); return rows;
   } finally { releaseLock(); }
 }
 
-// Initialize on load
-loadWorkbook();
+// NOTE: Do NOT call loadWorkbook() here at module load time.
+// The server's startup sequence calls syncFromDrive() first, then begins serving requests.
+// This ensures Drive data is pulled before any read/write happens.
+
+// Called once at startup after Drive sync to ensure local file exists and is migrated
+function loadWorkbookForInit() {
+  try { loadWorkbook(); } catch(e) { console.error('Workbook init error:', e.message); }
+}
 
 module.exports = {
   getPlayers, getPlayerById, savePlayer, updatePlayer, deletePlayer,
@@ -606,5 +632,6 @@ module.exports = {
   atomicSellPlayer,
   getSeasons, getSeasonById, saveSeason, deleteSeason,
   getGallery, saveGalleryItem, deleteGalleryItem,
-  getTournamentSettings, updateTournamentSettings
+  getTournamentSettings, updateTournamentSettings,
+  syncFromDrive, loadWorkbookForInit
 };

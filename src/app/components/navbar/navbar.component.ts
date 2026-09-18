@@ -20,7 +20,7 @@ import { Subscription } from 'rxjs';
           </div>
         </a>
 
-        <button class="hamburger" (click)="menuOpen = !menuOpen">
+        <button class="hamburger" (click)="menuOpen = !menuOpen" [class.open]="menuOpen">
           <span></span><span></span><span></span>
         </button>
 
@@ -34,6 +34,10 @@ import { Subscription } from 'rxjs';
           </a>
           <a routerLink="/rules" routerLinkActive="active" class="nav-link">Rules</a>
           <a routerLink="/tournament" routerLinkActive="active" class="nav-link">Tournament</a>
+          <a routerLink="/sessions" routerLinkActive="active" class="nav-link">Sessions</a>
+          <a routerLink="/previous-seasons" routerLinkActive="active" class="nav-link">Seasons</a>
+          <a routerLink="/gallery" routerLinkActive="active" class="nav-link">Gallery</a>
+          <a routerLink="/venue-contact" routerLinkActive="active" class="nav-link">Venue</a>
           <ng-container *ngIf="!auth.isLoggedIn">
             <a routerLink="/login" routerLinkActive="active" class="nav-link">Login</a>
           </ng-container>
@@ -56,13 +60,14 @@ import { Subscription } from 'rxjs';
     .brand-icon { font-size: 1.8rem; }
     .brand-name { font-family: 'Rajdhani', sans-serif; font-size: 1.4rem; font-weight: 700; color: var(--primary); line-height: 1; }
     .brand-sub { font-size: 0.65rem; color: var(--text-muted); letter-spacing: 1px; text-transform: uppercase; }
-    .nav-links { display: flex; align-items: center; gap: 4px; }
-    .hamburger { display: none; flex-direction: column; gap: 5px; background: none; border: none; cursor: pointer; padding: 4px; }
-    .hamburger span { display: block; width: 24px; height: 2px; background: var(--text); border-radius: 2px; }
-    @media (max-width: 768px) {
+    .nav-links { display: flex; align-items: center; gap: 2px; flex-wrap: wrap; }
+    .hamburger { display: none; flex-direction: column; gap: 5px; background: none; border: none; cursor: pointer; padding: 4px; z-index: 10; }
+    .hamburger span { display: block; width: 24px; height: 2px; background: var(--text); border-radius: 2px; transition: all 0.3s; }
+    @media (max-width: 1024px) {
       .hamburger { display: flex; }
-      .nav-links { display: none; position: absolute; top: 64px; left: 0; right: 0; background: var(--bg-card); border-bottom: 1px solid var(--border); flex-direction: column; padding: 1rem; gap: 4px; align-items: flex-start; }
+      .nav-links { display: none; position: fixed; top: 64px; left: 0; right: 0; bottom: 0; background: var(--bg-card); border-bottom: 1px solid var(--border); flex-direction: column; padding: 1rem; gap: 4px; align-items: flex-start; overflow-y: auto; z-index: 499; }
       .nav-links.open { display: flex; }
+      .nav-link { width: 100%; padding: 10px 16px; font-size: 1rem; }
     }
   `]
 })
